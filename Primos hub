@@ -1,3 +1,4 @@
+Eto na buong script:
 -- leaked by https://discord.gg/MT6BXdH9q
 
 local UserInputService = game:GetService("UserInputService")
@@ -14,7 +15,6 @@ ScreenGui.Name = "IvoDuels_Official"
 ScreenGui.Parent = CoreGui
 ScreenGui.ResetOnSpawn = false
 
--- Color Palette
 local COLORS = {
     MainBG = Color3.fromRGB(11, 14, 20),
     TabBG = Color3.fromRGB(15, 20, 28),
@@ -96,7 +96,7 @@ local TabContainer = create("Frame", {
     BackgroundColor3 = COLORS.TabBG, Parent = MainFrame
 })
 create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = TabContainer})
-local TabList = create("UIListLayout", {FillDirection = "Horizontal", HorizontalAlignment = "Center", Parent = TabContainer})
+create("UIListLayout", {FillDirection = "Horizontal", HorizontalAlignment = "Center", Parent = TabContainer})
 
 local PageContainer = create("Frame", {
     Size = UDim2.new(1, 0, 0.75, 0), Position = UDim2.new(0, 0, 0.22, 0),
@@ -195,10 +195,6 @@ local function createSafeFollowUI()
     uiCorner.CornerRadius = UDim.new(0, 8)
     uiCorner.Parent = SafeFollow.btn
     local dragging, dragInput, dragStart, startPos
-    local function update(input)
-        local delta = input.Position - dragStart
-        SafeFollow.btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
     SafeFollow.btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true; dragStart = input.Position; startPos = SafeFollow.btn.Position
@@ -208,7 +204,12 @@ local function createSafeFollowUI()
     SafeFollow.btn.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
     end)
-    UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then update(input) end end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            SafeFollow.btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
     SafeFollow.btn.MouseButton1Click:Connect(function()
         SafeFollow.Locked = not SafeFollow.Locked
         if SafeFollow.Locked then SafeFollow.btn.Text = "LOCK: ON"; SafeFollow.btn.BackgroundColor3 = Color3.fromRGB(255, 65, 65)
@@ -251,8 +252,7 @@ local function startSafeFollow()
         local direction = trgPos - myPos
         if direction.Magnitude > 0 then
             local moveDistance = math.min(direction.Magnitude, SafeFollow.FOLLOW_DISTANCE)
-            local goalPos = myPos + direction.Unit * moveDistance
-            hum:MoveTo(goalPos)
+            hum:MoveTo(myPos + direction.Unit * moveDistance)
             local yDiff = trgPos.Y - myPos.Y
             if yDiff > 1.5 then
                 hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, math.clamp(yDiff * 4, 0, 60), hrp.AssemblyLinearVelocity.Z)
@@ -287,14 +287,13 @@ local function disableSafeFollow()
 end
 
 -------------------------------------------------------------------------
--- IMPROVED ANTI-RAGDOLL MODULE
+-- ANTI-RAGDOLL MODULE
 -------------------------------------------------------------------------
 local AntiRagdoll = {
     Enabled = false, RAGDOLL_SPEED = 16,
     currentCharacter = nil, ragdollRemoteConnection = nil,
     moveConnection = nil, playerModule = nil, controls = nil
 }
-
 pcall(function()
     AntiRagdoll.playerModule = require(lp:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
     AntiRagdoll.controls = AntiRagdoll.playerModule:GetControls()
@@ -303,7 +302,7 @@ end)
 local function cleanupRagdoll()
     if AntiRagdoll.currentCharacter then
         local root = AntiRagdoll.currentCharacter:FindFirstChild("HumanoidRootPart")
-        if root then local anchor = root:FindFirstChild("RagdollAnchor"); if anchor then anchor:Destroy() end end
+        if root then local a = root:FindFirstChild("RagdollAnchor"); if a then a:Destroy() end end
     end
     if AntiRagdoll.moveConnection then AntiRagdoll.moveConnection:Disconnect(); AntiRagdoll.moveConnection = nil end
 end
@@ -316,11 +315,11 @@ local function setupAntiRagdoll(char)
     AntiRagdoll.currentCharacter = char
     cleanupRagdoll(); disconnectRemote()
     local humanoid = char:WaitForChild("Humanoid", 5)
-    local root     = char:WaitForChild("HumanoidRootPart", 5)
-    local head     = char:WaitForChild("Head", 5)
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    local head = char:WaitForChild("Head", 5)
     if not (humanoid and root and head) then return end
     local ragdollRemote = ReplicatedStorage:WaitForChild("Packages", 8):WaitForChild("Ragdoll", 5):WaitForChild("Ragdoll", 5)
-    if not ragdollRemote or not ragdollRemote:IsA("RemoteEvent") then warn("[Anti-Ragdoll] Could not find Ragdoll remote"); return end
+    if not ragdollRemote or not ragdollRemote:IsA("RemoteEvent") then return end
     AntiRagdoll.ragdollRemoteConnection = ragdollRemote.OnClientEvent:Connect(function(arg1, arg2)
         if not AntiRagdoll.Enabled then return end
         if arg1 == "Make" or arg2 == "manualM" then
@@ -329,14 +328,14 @@ local function setupAntiRagdoll(char)
             if AntiRagdoll.controls then pcall(AntiRagdoll.controls.Enable, AntiRagdoll.controls) end
             cleanupRagdoll()
             local anchor = Instance.new("BodyPosition")
-            anchor.Name = "RagdollAnchor"; anchor.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+            anchor.Name = "RagdollAnchor"; anchor.MaxForce = Vector3.new(1e6,1e6,1e6)
             anchor.P = 5000; anchor.D = 1000; anchor.Position = root.Position; anchor.Parent = root
             AntiRagdoll.moveConnection = RunService.RenderStepped:Connect(function()
                 if not AntiRagdoll.Enabled or not anchor or not anchor.Parent then
                     if AntiRagdoll.moveConnection then AntiRagdoll.moveConnection:Disconnect(); AntiRagdoll.moveConnection = nil end; return
                 end
-                local moveDir = humanoid.MoveDirection
-                anchor.Position = moveDir.Magnitude > 0 and root.Position + moveDir.Unit * AntiRagdoll.RAGDOLL_SPEED or root.Position
+                local md = humanoid.MoveDirection
+                anchor.Position = md.Magnitude > 0 and root.Position + md.Unit * AntiRagdoll.RAGDOLL_SPEED or root.Position
             end)
         end
         if arg1 == "Destroy" or arg2 == "manualD" then
@@ -437,21 +436,24 @@ end
 local PlayerESP = { Enabled = false, ESP_COLOR = Color3.fromRGB(85, 170, 255), Highlights = {}, Billboards = {}, Connections = {} }
 
 local function createHighlight(character)
-    local h = Instance.new("Highlight"); h.Name = "IvoDuels_PlayerESP_Highlight"; h.Adornee = character
-    h.FillColor = PlayerESP.ESP_COLOR; h.FillTransparency = 0.25; h.OutlineColor = PlayerESP.ESP_COLOR
-    h.OutlineTransparency = 0; h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; h.Parent = CoreGui; return h
+    local h = Instance.new("Highlight"); h.Name = "IvoDuels_ESP"
+    h.Adornee = character; h.FillColor = PlayerESP.ESP_COLOR; h.FillTransparency = 0.25
+    h.OutlineColor = PlayerESP.ESP_COLOR; h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; h.Parent = CoreGui; return h
 end
 
 local function createBillboard(character, player)
     local hrp = character:WaitForChild("HumanoidRootPart", 5); if not hrp then return nil end
-    local bb = Instance.new("BillboardGui"); bb.Name = "IvoDuels_PlayerESP_Name"; bb.Adornee = hrp
-    bb.AlwaysOnTop = true; bb.Size = UDim2.new(0, 100, 0, 20); bb.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-    bb.MaxDistance = 600; bb.Parent = CoreGui
-    local bg = Instance.new("Frame", bb); bg.Size = UDim2.new(1, 0, 1, 0); bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    bg.BackgroundTransparency = 0.4; Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
-    local txt = Instance.new("TextLabel", bg); txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1
-    txt.Font = Enum.Font.GothamSemibold; txt.TextSize = 13; txt.TextColor3 = Color3.new(1, 1, 1)
-    txt.TextStrokeTransparency = 0.2; txt.Text = player.DisplayName; return bb
+    local bb = Instance.new("BillboardGui"); bb.Name = "IvoDuels_ESP_Name"; bb.Adornee = hrp
+    bb.AlwaysOnTop = true; bb.Size = UDim2.new(0, 100, 0, 20)
+    bb.StudsOffsetWorldSpace = Vector3.new(0, 3, 0); bb.MaxDistance = 600; bb.Parent = CoreGui
+    local bg = Instance.new("Frame", bb); bg.Size = UDim2.new(1,0,1,0)
+    bg.BackgroundColor3 = Color3.fromRGB(0,0,0); bg.BackgroundTransparency = 0.4
+    Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 6)
+    local txt = Instance.new("TextLabel", bg); txt.Size = UDim2.new(1,0,1,0)
+    txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamSemibold; txt.TextSize = 13
+    txt.TextColor3 = Color3.new(1,1,1); txt.TextStrokeTransparency = 0.2; txt.Text = player.DisplayName
+    return bb
 end
 
 local function attachESP(player)
@@ -463,7 +465,7 @@ local function attachESP(player)
         PlayerESP.Billboards[player] = createBillboard(character, player)
     end
     if player.Character then apply(player.Character) end
-    local conn = player.CharacterAdded:Connect(apply); table.insert(PlayerESP.Connections, conn)
+    table.insert(PlayerESP.Connections, player.CharacterAdded:Connect(apply))
 end
 
 local function removeESP(player)
@@ -504,83 +506,67 @@ end
 
 local function createSpeedUI()
     local SpeedScreenGui = create("ScreenGui", {Name = "IvoDuels_SpeedUI", ResetOnSpawn = false, Parent = CoreGui})
-    local MainFrame = create("Frame", {
+    local MF = create("Frame", {
         Name = "SpeedMainFrame", Size = UDim2.new(0, 240, 0, 260),
         Position = UDim2.new(0.5, -120, 0.4, 0), BackgroundColor3 = Color3.fromRGB(20, 25, 30),
         BackgroundTransparency = 0.2, BorderSizePixel = 0, Active = true, Draggable = true, Parent = SpeedScreenGui
     })
-    create("UICorner", {CornerRadius = UDim.new(0, 10), Parent = MainFrame})
-    create("UIStroke", {Color = Color3.fromRGB(255, 255, 255), Thickness = 2, Parent = MainFrame})
+    create("UICorner", {CornerRadius = UDim.new(0, 10), Parent = MF})
+    create("UIStroke", {Color = Color3.fromRGB(255,255,255), Thickness = 2, Parent = MF})
     create("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 12, 0, 10), BackgroundTransparency = 1,
-        Text = "Ivo Duels Speed Customizer", TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamBold, Parent = MainFrame
+        Size = UDim2.new(1,0,0,30), Position = UDim2.new(0,12,0,10), BackgroundTransparency = 1,
+        Text = "Ivo Duels Speed Customizer", TextColor3 = Color3.fromRGB(255,255,255),
+        TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamBold, Parent = MF
     })
-    local Header = create("Frame", {
-        Size = UDim2.new(1, -20, 0, 40), Position = UDim2.new(0, 10, 0, 50),
-        BackgroundColor3 = Color3.fromRGB(0, 120, 215), BorderSizePixel = 0, Parent = MainFrame
-    })
-    create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = Header})
-    local ToggleBtn = create("TextButton", {
-        Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "ON",
-        TextColor3 = Color3.fromRGB(255, 255, 255), TextSize = 18, Font = Enum.Font.GothamBold, Parent = Header
-    })
-    local function createInputRow(labelText, defaultValue, pos)
-        create("TextLabel", {
-            Size = UDim2.new(0.6, 0, 0, 30), Position = UDim2.new(0, 12, 0, pos), BackgroundTransparency = 1,
-            Text = labelText, TextColor3 = Color3.fromRGB(200, 200, 200), TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.Gotham, Parent = MainFrame
-        })
-        local box = create("TextBox", {
-            Size = UDim2.new(0, 80, 0, 30), Position = UDim2.new(1, -90, 0, pos),
-            BackgroundColor3 = Color3.fromRGB(30, 35, 40), Text = tostring(defaultValue),
-            TextColor3 = Color3.fromRGB(255, 255, 255), Font = Enum.Font.GothamBold,
-            ClearTextOnFocus = false, Parent = MainFrame
-        })
-        create("UICorner", {CornerRadius = UDim.new(0, 4), Parent = box}); return box
+    local Hdr = create("Frame", {Size = UDim2.new(1,-20,0,40), Position = UDim2.new(0,10,0,50), BackgroundColor3 = Color3.fromRGB(0,120,215), BorderSizePixel = 0, Parent = MF})
+    create("UICorner", {CornerRadius = UDim.new(0,6), Parent = Hdr})
+    local TBtn = create("TextButton", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "ON", TextColor3 = Color3.fromRGB(255,255,255), TextSize = 18, Font = Enum.Font.GothamBold, Parent = Hdr})
+    local function makeRow(lbl, def, pos)
+        create("TextLabel", {Size = UDim2.new(0.6,0,0,30), Position = UDim2.new(0,12,0,pos), BackgroundTransparency = 1, Text = lbl, TextColor3 = Color3.fromRGB(200,200,200), TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.Gotham, Parent = MF})
+        local box = create("TextBox", {Size = UDim2.new(0,80,0,30), Position = UDim2.new(1,-90,0,pos), BackgroundColor3 = Color3.fromRGB(30,35,40), Text = tostring(def), TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, ClearTextOnFocus = false, Parent = MF})
+        create("UICorner", {CornerRadius = UDim.new(0,4), Parent = box}); return box
     end
-    local SpeedInput = createInputRow("Speed",     SpeedCustomizer.SpeedValue, 100)
-    local StealInput = createInputRow("Steal Spd", SpeedCustomizer.StealValue, 140)
-    local JumpInput  = createInputRow("Jump",      SpeedCustomizer.JumpValue,  180)
-    local DownInput  = createInputRow("Down Spd",  SpeedCustomizer.DownValue,  220)
-    ToggleBtn.MouseButton1Click:Connect(function()
+    local SI = makeRow("Speed",    SpeedCustomizer.SpeedValue, 100)
+    local ST = makeRow("Steal Spd",SpeedCustomizer.StealValue, 140)
+    local JI = makeRow("Jump",     SpeedCustomizer.JumpValue,  180)
+    local DI = makeRow("Down Spd", SpeedCustomizer.DownValue,  220)
+    TBtn.MouseButton1Click:Connect(function()
         SpeedCustomizer.Enabled = not SpeedCustomizer.Enabled
-        ToggleBtn.Text = SpeedCustomizer.Enabled and "ON" or "OFF"
-        Header.BackgroundColor3 = SpeedCustomizer.Enabled and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(150, 30, 30)
+        TBtn.Text = SpeedCustomizer.Enabled and "ON" or "OFF"
+        Hdr.BackgroundColor3 = SpeedCustomizer.Enabled and Color3.fromRGB(0,120,215) or Color3.fromRGB(150,30,30)
     end)
-    local function validateInput(box, min, max)
+    local function validate(box, min, max)
         box.FocusLost:Connect(function()
             local num = tonumber(box.Text)
             if num then
                 num = math.clamp(num, min, max); box.Text = tostring(num)
-                if box == SpeedInput then SpeedCustomizer.SpeedValue = num
-                elseif box == StealInput then SpeedCustomizer.StealValue = num
-                elseif box == JumpInput  then SpeedCustomizer.JumpValue  = num
-                elseif box == DownInput  then SpeedCustomizer.DownValue  = num end
+                if box == SI then SpeedCustomizer.SpeedValue = num
+                elseif box == ST then SpeedCustomizer.StealValue = num
+                elseif box == JI then SpeedCustomizer.JumpValue = num
+                elseif box == DI then SpeedCustomizer.DownValue = num end
             else
-                if box == SpeedInput then box.Text = tostring(SpeedCustomizer.SpeedValue)
-                elseif box == StealInput then box.Text = tostring(SpeedCustomizer.StealValue)
-                elseif box == JumpInput  then box.Text = tostring(SpeedCustomizer.JumpValue)
-                elseif box == DownInput  then box.Text = tostring(SpeedCustomizer.DownValue) end
+                if box == SI then box.Text = tostring(SpeedCustomizer.SpeedValue)
+                elseif box == ST then box.Text = tostring(SpeedCustomizer.StealValue)
+                elseif box == JI then box.Text = tostring(SpeedCustomizer.JumpValue)
+                elseif box == DI then box.Text = tostring(SpeedCustomizer.DownValue) end
             end
         end)
     end
-    validateInput(SpeedInput, 1, 200); validateInput(StealInput, 1, 200)
-    validateInput(JumpInput, 1, 200);  validateInput(DownInput, 1, 100)
-    local dragSpeed, startPos, startMousePos = false, nil, nil
-    MainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragSpeed = true; startPos = MainFrame.Position; startMousePos = input.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragSpeed = false end end)
+    validate(SI,1,200); validate(ST,1,200); validate(JI,1,200); validate(DI,1,100)
+    local dspd, sp2, sm2 = false, nil, nil
+    MF.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dspd = true; sp2 = MF.Position; sm2 = i.Position
+            i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dspd = false end end)
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragSpeed and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - startMousePos
-            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    UserInputService.InputChanged:Connect(function(i)
+        if dspd and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = i.Position - sm2
+            MF.Position = UDim2.new(sp2.X.Scale, sp2.X.Offset + d.X, sp2.Y.Scale, sp2.Y.Offset + d.Y)
         end
     end)
-    return {ScreenGui = SpeedScreenGui, ToggleBtn = ToggleBtn, SpeedInput = SpeedInput, StealInput = StealInput, JumpInput = JumpInput, DownInput = DownInput, MainFrame = MainFrame}
+    return {ScreenGui = SpeedScreenGui, ToggleBtn = TBtn, SpeedInput = SI, StealInput = ST, JumpInput = JI, DownInput = DI, MainFrame = MF}
 end
 
 local function enableSpeedCustomizer()
@@ -592,24 +578,20 @@ local function enableSpeedCustomizer()
     lp.CharacterAdded:Connect(setupSpeedCharacter)
     SpeedCustomizer.HeartbeatConn = RunService.Heartbeat:Connect(function()
         if not SpeedCustomizer.Enabled or not SpeedCustomizer.character or not SpeedCustomizer.hrp or not SpeedCustomizer.hum then return end
-        local moveDir = SpeedCustomizer.hum.MoveDirection
-        if moveDir.Magnitude > 0 then
-            local isSteal = SpeedCustomizer.hum.WalkSpeed < 25
-            local targetSpeed = isSteal and SpeedCustomizer.StealValue or SpeedCustomizer.SpeedValue
-            if targetSpeed then
-                SpeedCustomizer.hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * targetSpeed, SpeedCustomizer.hrp.AssemblyLinearVelocity.Y, moveDir.Z * targetSpeed)
-            end
+        local md = SpeedCustomizer.hum.MoveDirection
+        if md.Magnitude > 0 then
+            local ts = (SpeedCustomizer.hum.WalkSpeed < 25) and SpeedCustomizer.StealValue or SpeedCustomizer.SpeedValue
+            if ts then SpeedCustomizer.hrp.AssemblyLinearVelocity = Vector3.new(md.X*ts, SpeedCustomizer.hrp.AssemblyLinearVelocity.Y, md.Z*ts) end
         end
-        local curVel = SpeedCustomizer.hrp.AssemblyLinearVelocity
-        if curVel.Y < -SpeedCustomizer.DownValue then
-            SpeedCustomizer.hrp.AssemblyLinearVelocity = Vector3.new(curVel.X, -SpeedCustomizer.DownValue, curVel.Z)
+        local cv = SpeedCustomizer.hrp.AssemblyLinearVelocity
+        if cv.Y < -SpeedCustomizer.DownValue then
+            SpeedCustomizer.hrp.AssemblyLinearVelocity = Vector3.new(cv.X, -SpeedCustomizer.DownValue, cv.Z)
         end
     end)
     SpeedCustomizer.JumpConn = UserInputService.JumpRequest:Connect(function()
         if SpeedCustomizer.Enabled and SpeedCustomizer.character and SpeedCustomizer.hum and SpeedCustomizer.hum.FloorMaterial ~= Enum.Material.Air then
-            local jVal = SpeedCustomizer.JumpValue
-            if jVal and SpeedCustomizer.hrp then
-                SpeedCustomizer.hrp.AssemblyLinearVelocity = Vector3.new(SpeedCustomizer.hrp.AssemblyLinearVelocity.X, jVal, SpeedCustomizer.hrp.AssemblyLinearVelocity.Z)
+            if SpeedCustomizer.JumpValue and SpeedCustomizer.hrp then
+                SpeedCustomizer.hrp.AssemblyLinearVelocity = Vector3.new(SpeedCustomizer.hrp.AssemblyLinearVelocity.X, SpeedCustomizer.JumpValue, SpeedCustomizer.hrp.AssemblyLinearVelocity.Z)
             end
         end
     end)
@@ -628,23 +610,20 @@ end
 -------------------------------------------------------------------------
 local InfiniteJump = { Enabled = false, JUMP_POWER = 50, COOLDOWN = 0.15, lastJump = 0, JumpConnection = nil }
 
-local function handleJumpRequest()
-    if not InfiniteJump.Enabled then return end
-    local character = lp.Character
-    local hrp = character and character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if hrp and humanoid and humanoid.FloorMaterial == Enum.Material.Air then
-        local now = tick()
-        if now - InfiniteJump.lastJump >= InfiniteJump.COOLDOWN then
-            InfiniteJump.lastJump = now
-            hrp.Velocity = Vector3.new(hrp.Velocity.X, InfiniteJump.JUMP_POWER, hrp.Velocity.Z)
-        end
-    end
-end
-
 local function enableInfJump()
     if InfiniteJump.Enabled then return end; InfiniteJump.Enabled = true
-    InfiniteJump.JumpConnection = UserInputService.JumpRequest:Connect(handleJumpRequest)
+    InfiniteJump.JumpConnection = UserInputService.JumpRequest:Connect(function()
+        local char = lp.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hrp and hum and hum.FloorMaterial == Enum.Material.Air then
+            local now = tick()
+            if now - InfiniteJump.lastJump >= InfiniteJump.COOLDOWN then
+                InfiniteJump.lastJump = now
+                hrp.Velocity = Vector3.new(hrp.Velocity.X, InfiniteJump.JUMP_POWER, hrp.Velocity.Z)
+            end
+        end
+    end)
 end
 
 local function disableInfJump()
@@ -655,12 +634,12 @@ end
 -------------------------------------------------------------------------
 -- WALK FLING MODULE
 -------------------------------------------------------------------------
-local WalkFling = { Enabled = false, Connections = {} }
+local WalkFling = { Enabled = false, Connections = {}, gui = nil, btn = nil }
 
 local function resetFlingVelocity()
-    local character = lp.Character
-    if character then
-        local root = character:FindFirstChild("HumanoidRootPart")
+    local char = lp.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
         if root then root.AssemblyLinearVelocity = Vector3.new(0,0,0); root.AssemblyAngularVelocity = Vector3.new(0,0,0) end
     end
 end
@@ -705,8 +684,63 @@ local function startFlingLoop()
     table.insert(WalkFling.Connections, flingThread)
 end
 
+local function createWalkFlingUI()
+    WalkFling.gui = Instance.new("ScreenGui")
+    WalkFling.gui.Name = "WalkFlingUI"; WalkFling.gui.ResetOnSpawn = false
+    WalkFling.gui.Enabled = false; WalkFling.gui.Parent = CoreGui
+    WalkFling.btn = Instance.new("TextButton")
+    WalkFling.btn.Size = UDim2.new(0, 130, 0, 40)
+    WalkFling.btn.Position = UDim2.new(0.5, -65, 0.72, 0)
+    WalkFling.btn.Text = "FLING: OFF"
+    WalkFling.btn.Font = Enum.Font.GothamBold
+    WalkFling.btn.TextSize = 14
+    WalkFling.btn.TextColor3 = Color3.fromRGB(20, 20, 20)
+    WalkFling.btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    WalkFling.btn.AutoButtonColor = false
+    WalkFling.btn.Parent = WalkFling.gui
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 8); corner.Parent = WalkFling.btn
+    local stroke = Instance.new("UIStroke"); stroke.Color = Color3.fromRGB(200,200,200); stroke.Thickness = 1.5; stroke.Parent = WalkFling.btn
+    local dragging, dragInput, dragStart, startPos
+    WalkFling.btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = WalkFling.btn.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    WalkFling.btn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            WalkFling.btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    WalkFling.btn.MouseButton1Click:Connect(function()
+        if WalkFling.Enabled then
+            WalkFling.Enabled = false; clearFlingConnections(); resetFlingVelocity()
+            WalkFling.btn.Text = "FLING: OFF"
+            WalkFling.btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            WalkFling.btn.TextColor3 = Color3.fromRGB(20, 20, 20)
+        else
+            WalkFling.Enabled = true
+            WalkFling.btn.Text = "FLING: ON"
+            WalkFling.btn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+            WalkFling.btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            startFlingLoop()
+        end
+    end)
+end
+
 local function enableWalkFling()
-    if WalkFling.Enabled then return end; WalkFling.Enabled = true; clearFlingConnections()
+    if WalkFling.Enabled then return end
+    if not WalkFling.gui then createWalkFlingUI() end
+    WalkFling.gui.Enabled = true
+    WalkFling.Enabled = true
+    WalkFling.btn.Text = "FLING: ON"
+    WalkFling.btn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    WalkFling.btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    clearFlingConnections()
     local stepConn = RunService.Stepped:Connect(function()
         if not WalkFling.Enabled then return end
         for _, plr in ipairs(Players:GetPlayers()) do
@@ -721,8 +755,8 @@ local function enableWalkFling()
     local charConn = lp.CharacterAdded:Connect(function(character)
         local hum = character:FindFirstChildWhichIsA("Humanoid")
         if hum then
-            local diedConn = hum.Died:Connect(function() if WalkFling.Enabled then task.wait(1); startFlingLoop() end end)
-            table.insert(WalkFling.Connections, diedConn)
+            local dc = hum.Died:Connect(function() if WalkFling.Enabled then task.wait(1); startFlingLoop() end end)
+            table.insert(WalkFling.Connections, dc)
         end
     end)
     table.insert(WalkFling.Connections, charConn)
@@ -730,13 +764,18 @@ local function enableWalkFling()
 end
 
 local function disableWalkFling()
-    if not WalkFling.Enabled then return end; WalkFling.Enabled = false
-    clearFlingConnections(); resetFlingVelocity()
+    if not WalkFling.Enabled then return end
+    WalkFling.Enabled = false; clearFlingConnections(); resetFlingVelocity()
+    if WalkFling.gui then WalkFling.gui.Enabled = false end
+    if WalkFling.btn then
+        WalkFling.btn.Text = "FLING: OFF"
+        WalkFling.btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        WalkFling.btn.TextColor3 = Color3.fromRGB(20, 20, 20)
+    end
 end
 
 -------------------------------------------------------------------------
 -- UI TOGGLE CALLBACKS
--- Auto-load saved config FIRST so AddToggle reads correct saved states
 -------------------------------------------------------------------------
 autoLoad()
 
@@ -757,8 +796,8 @@ AddToggle("Combat", "Melee Aimbot", false, function(active)
         Cebo.Attach = Instance.new("Attachment", hrp)
         Cebo.Align = Instance.new("AlignOrientation", hrp)
         Cebo.Align.Attachment0, Cebo.Align.Mode, Cebo.Align.RigidityEnabled = Cebo.Attach, Enum.OrientationAlignmentMode.OneAttachment, true
-        Cebo.Circle = create("Part", {Shape = "Cylinder", Material = "Neon", Size = Vector3.new(0.05, 14.5, 14.5), Color = Color3.new(1,0,0), CanCollide = false, Massless = true, Parent = Workspace})
-        create("Weld", {Part0 = hrp, Part1 = Cebo.Circle, C0 = CFrame.new(0, -1, 0) * CFrame.Angles(0, 0, math.rad(90)), Parent = Cebo.Circle})
+        Cebo.Circle = create("Part", {Shape = "Cylinder", Material = "Neon", Size = Vector3.new(0.05,14.5,14.5), Color = Color3.new(1,0,0), CanCollide = false, Massless = true, Parent = Workspace})
+        create("Weld", {Part0 = hrp, Part1 = Cebo.Circle, C0 = CFrame.new(0,-1,0) * CFrame.Angles(0,0,math.rad(90)), Parent = Cebo.Circle})
         Cebo.Conn = RunService.RenderStepped:Connect(function()
             local target, dmin = nil, 7.25
             for _, p in ipairs(Players:GetPlayers()) do
@@ -800,7 +839,7 @@ AddToggle("Protect", "Anti-Ragdoll", false, function(v)
     if v and lp.Character then setupAntiRagdoll(lp.Character) else cleanupRagdoll(); disconnectRemote() end
 end)
 
-local AntiEffects = { Enabled = false, DisabledRemotes = {}, Watcher = nil, Keywords = {"effect", "vfx", "fx", "particle", "camera", "shake", "blur", "flash", "visual", "ui", "item"} }
+local AntiEffects = { Enabled = false, Watcher = nil, Keywords = {"effect","vfx","fx","particle","camera","shake","blur","flash","visual","ui","item"} }
 AddToggle("Protect", "Anti Bee & Disco", false, function(v)
     AntiEffects.Enabled = v
     if v then AntiEffects.Watcher = ReplicatedStorage.DescendantAdded:Connect(function(r)
@@ -835,12 +874,6 @@ AddToggle("Protect", "Anti Turret", false, function(v)
     end) else if AntiTurret.Conn then AntiTurret.Conn:Disconnect(); AntiTurret.Conn = nil end; AntiTurret.Target = nil end
 end)
 
--- VISUAL TAB
-AddToggle("Visual", "Xray Base", false, function(v) if v then enableXrayBase() else disableXrayBase() end end)
-AddToggle("Visual", "No Anim", false, function(v) if v then enableNoAnim() else disableNoAnim() end end)
-AddToggle("Visual", "Player ESP", false, function(v) if v then enableESP() else disableESP() end end)
-
--- PROTECT TAB: Lock Target + Walk Fling
 AddToggle("Protect", "Lock Target", false, function(v)
     if v then enableSafeFollow() else disableSafeFollow() end
 end)
@@ -849,55 +882,52 @@ AddToggle("Protect", "Walk Fling", false, function(v)
     if v then enableWalkFling() else disableWalkFling() end
 end)
 
+-- VISUAL TAB
+AddToggle("Visual", "Xray Base", false, function(v) if v then enableXrayBase() else disableXrayBase() end end)
+AddToggle("Visual", "No Anim", false, function(v) if v then enableNoAnim() else disableNoAnim() end end)
+AddToggle("Visual", "Player ESP", false, function(v) if v then enableESP() else disableESP() end end)
+
 -- STATIC BUTTONS
 AddToggle("Combat", "Auto Walk", false, function(v) end)
 AddToggle("Combat", "Auto Medusa", false, function(v) end)
 
 -------------------------------------------------------------------------
--- TOP HUD (Script Name + FPS + Ping)
+-- TOP HUD
 -------------------------------------------------------------------------
 local HudGui = Instance.new("ScreenGui")
 HudGui.Name = "IvoDuels_HUD"; HudGui.ResetOnSpawn = false; HudGui.DisplayOrder = 999; HudGui.Parent = CoreGui
 
 local HudFrame = Instance.new("Frame")
 HudFrame.Size = UDim2.new(0, 220, 0, 24); HudFrame.Position = UDim2.new(0.5, -110, 0, 6)
-HudFrame.BackgroundColor3 = Color3.fromRGB(11, 14, 20); HudFrame.BackgroundTransparency = 0.2
+HudFrame.BackgroundColor3 = Color3.fromRGB(11,14,20); HudFrame.BackgroundTransparency = 0.2
 HudFrame.BorderSizePixel = 0; HudFrame.Parent = HudGui
 Instance.new("UICorner", HudFrame).CornerRadius = UDim.new(0, 6)
-local hudStroke = Instance.new("UIStroke", HudFrame)
-hudStroke.Color = Color3.fromRGB(255, 255, 255); hudStroke.Thickness = 1
+local hs = Instance.new("UIStroke", HudFrame); hs.Color = Color3.fromRGB(255,255,255); hs.Thickness = 1
 
 local HudName = Instance.new("TextLabel")
-HudName.Size = UDim2.new(0.4, 0, 1, 0); HudName.Position = UDim2.new(0, 8, 0, 0)
-HudName.BackgroundTransparency = 1; HudName.Text = "🗡 Ivo Duels"
-HudName.TextColor3 = Color3.fromRGB(255, 255, 255); HudName.Font = Enum.Font.GothamBold
-HudName.TextSize = 11; HudName.TextXAlignment = Enum.TextXAlignment.Left; HudName.Parent = HudFrame
+HudName.Size = UDim2.new(0.4,0,1,0); HudName.Position = UDim2.new(0,8,0,0); HudName.BackgroundTransparency = 1
+HudName.Text = "🗡 Ivo Duels"; HudName.TextColor3 = Color3.fromRGB(255,255,255)
+HudName.Font = Enum.Font.GothamBold; HudName.TextSize = 11; HudName.TextXAlignment = Enum.TextXAlignment.Left; HudName.Parent = HudFrame
 
-local Div1 = Instance.new("Frame")
-Div1.Size = UDim2.new(0, 1, 0.6, 0); Div1.Position = UDim2.new(0.4, 0, 0.2, 0)
-Div1.BackgroundColor3 = Color3.fromRGB(255,255,255); Div1.BackgroundTransparency = 0.6
-Div1.BorderSizePixel = 0; Div1.Parent = HudFrame
+local function makeDivider(xScale)
+    local d = Instance.new("Frame"); d.Size = UDim2.new(0,1,0.6,0); d.Position = UDim2.new(xScale,0,0.2,0)
+    d.BackgroundColor3 = Color3.fromRGB(255,255,255); d.BackgroundTransparency = 0.6; d.BorderSizePixel = 0; d.Parent = HudFrame
+end
+makeDivider(0.4); makeDivider(0.69)
 
 local HudFPS = Instance.new("TextLabel")
-HudFPS.Size = UDim2.new(0.28, 0, 1, 0); HudFPS.Position = UDim2.new(0.41, 0, 0, 0)
-HudFPS.BackgroundTransparency = 1; HudFPS.Text = "FPS: --"
-HudFPS.TextColor3 = Color3.fromRGB(120, 255, 160); HudFPS.Font = Enum.Font.GothamBold
-HudFPS.TextSize = 11; HudFPS.TextXAlignment = Enum.TextXAlignment.Center; HudFPS.Parent = HudFrame
-
-local Div2 = Instance.new("Frame")
-Div2.Size = UDim2.new(0, 1, 0.6, 0); Div2.Position = UDim2.new(0.69, 0, 0.2, 0)
-Div2.BackgroundColor3 = Color3.fromRGB(255,255,255); Div2.BackgroundTransparency = 0.6
-Div2.BorderSizePixel = 0; Div2.Parent = HudFrame
+HudFPS.Size = UDim2.new(0.28,0,1,0); HudFPS.Position = UDim2.new(0.41,0,0,0); HudFPS.BackgroundTransparency = 1
+HudFPS.Text = "FPS: --"; HudFPS.TextColor3 = Color3.fromRGB(120,255,160)
+HudFPS.Font = Enum.Font.GothamBold; HudFPS.TextSize = 11; HudFPS.TextXAlignment = Enum.TextXAlignment.Center; HudFPS.Parent = HudFrame
 
 local HudPing = Instance.new("TextLabel")
-HudPing.Size = UDim2.new(0.3, -8, 1, 0); HudPing.Position = UDim2.new(0.7, 0, 0, 0)
-HudPing.BackgroundTransparency = 1; HudPing.Text = "Ping: --"
-HudPing.TextColor3 = Color3.fromRGB(120, 200, 255); HudPing.Font = Enum.Font.GothamBold
-HudPing.TextSize = 11; HudPing.TextXAlignment = Enum.TextXAlignment.Center; HudPing.Parent = HudFrame
+HudPing.Size = UDim2.new(0.3,-8,1,0); HudPing.Position = UDim2.new(0.7,0,0,0); HudPing.BackgroundTransparency = 1
+HudPing.Text = "Ping: --"; HudPing.TextColor3 = Color3.fromRGB(120,200,255)
+HudPing.Font = Enum.Font.GothamBold; HudPing.TextSize = 11; HudPing.TextXAlignment = Enum.TextXAlignment.Center; HudPing.Parent = HudFrame
 
 local frameCount, lastTime = 0, tick()
 RunService.RenderStepped:Connect(function()
-    frameCount = frameCount + 1
+    frameCount += 1
     local now = tick()
     if now - lastTime >= 0.5 then
         local fps = math.floor(frameCount / (now - lastTime))
@@ -914,20 +944,19 @@ end)
 -- SETTINGS TAB: LOCK UI
 -------------------------------------------------------------------------
 local UILocked = false
-
-local LockRow = create("Frame", {Size = UDim2.new(0.92, 0, 0, 50), BackgroundColor3 = COLORS.RowBG, BackgroundTransparency = 0.5, Parent = Pages["Settings"]})
-create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = LockRow})
+local LockRow = create("Frame", {Size = UDim2.new(0.92,0,0,50), BackgroundColor3 = COLORS.RowBG, BackgroundTransparency = 0.5, Parent = Pages["Settings"]})
+create("UICorner", {CornerRadius = UDim.new(0,8), Parent = LockRow})
 create("UIStroke", {Color = COLORS.Border, Thickness = 1, Transparency = 0.8, Parent = LockRow})
-create("TextLabel", {Text = "Lock UI", Size = UDim2.new(0.6, 0, 1, 0), Position = UDim2.new(0.05, 0, 0, 0), TextColor3 = Color3.new(1,1,1), Font = "GothamBold", TextSize = 13, BackgroundTransparency = 1, TextXAlignment = "Left", Parent = LockRow})
-local LockTglBg = create("Frame", {Size = UDim2.new(0, 42, 0, 20), Position = UDim2.new(0.95, -42, 0.5, -10), BackgroundColor3 = Color3.fromRGB(40, 45, 55), Parent = LockRow})
-create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = LockTglBg})
-local LockCircle = create("Frame", {Size = UDim2.new(0, 16, 0, 16), Position = UDim2.new(0.1, 0, 0.1, 0), BackgroundColor3 = Color3.new(1,1,1), Parent = LockTglBg})
-create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = LockCircle})
-local LockBtn = create("TextButton", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "", Parent = LockRow})
-LockBtn.MouseButton1Click:Connect(function()
+create("TextLabel", {Text = "Lock UI", Size = UDim2.new(0.6,0,1,0), Position = UDim2.new(0.05,0,0,0), TextColor3 = Color3.new(1,1,1), Font = "GothamBold", TextSize = 13, BackgroundTransparency = 1, TextXAlignment = "Left", Parent = LockRow})
+local LTB = create("Frame", {Size = UDim2.new(0,42,0,20), Position = UDim2.new(0.95,-42,0.5,-10), BackgroundColor3 = Color3.fromRGB(40,45,55), Parent = LockRow})
+create("UICorner", {CornerRadius = UDim.new(1,0), Parent = LTB})
+local LC = create("Frame", {Size = UDim2.new(0,16,0,16), Position = UDim2.new(0.1,0,0.1,0), BackgroundColor3 = Color3.new(1,1,1), Parent = LTB})
+create("UICorner", {CornerRadius = UDim.new(1,0), Parent = LC})
+local LBtn = create("TextButton", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "", Parent = LockRow})
+LBtn.MouseButton1Click:Connect(function()
     UILocked = not UILocked
-    TweenService:Create(LockTglBg, TweenInfo.new(0.2), {BackgroundColor3 = UILocked and COLORS.Border or Color3.fromRGB(40,45,55)}):Play()
-    TweenService:Create(LockCircle, TweenInfo.new(0.2), {Position = UILocked and UDim2.new(0.55,0,0.1,0) or UDim2.new(0.1,0,0.1,0)}):Play()
+    TweenService:Create(LTB, TweenInfo.new(0.2), {BackgroundColor3 = UILocked and COLORS.Border or Color3.fromRGB(40,45,55)}):Play()
+    TweenService:Create(LC, TweenInfo.new(0.2), {Position = UILocked and UDim2.new(0.55,0,0.1,0) or UDim2.new(0.1,0,0.1,0)}):Play()
 end)
 
 -------------------------------------------------------------------------
