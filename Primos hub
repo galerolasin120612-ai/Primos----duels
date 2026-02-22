@@ -1,4 +1,3 @@
-```lua
 -- leaked by https://discord.gg/MT6BXdH9q
 
 local UserInputService = game:GetService("UserInputService")
@@ -689,4 +688,3 @@ local function drag(f)
 end
 drag(MainFrame); drag(ToggleIcon)
 ToggleIcon.MouseButton1Click:Connect(function() MainFrame.Visible=not MainFrame.Visible end)
-```
