@@ -463,6 +463,148 @@ initializeAutoGrabScanner()
 startAutoGrabLoop()
 
 -------------------------------------------------------------------------
+-- AUTO WALK MODULE (NEW)
+-------------------------------------------------------------------------
+local AutoWalkActive = false
+local autoWalkEnabled = false
+
+local AW_VELOCITY_SPEED = 58.37
+local AW_SECOND_PHASE_SPEED = 29.4
+local AW_JUMP_VELOCITY = 50
+
+local aw_path1 = {
+    {pos = Vector3.new(-470.6, -5.9, 34.4)},
+    {pos = Vector3.new(-484.2, -3.9, 21.4)},
+    {pos = Vector3.new(-475.6, -5.8, 29.3)},
+    {pos = Vector3.new(-473.4, -5.9, 111)}
+}
+local aw_path2 = {
+    {pos = Vector3.new(-474.7, -5.9, 91.0)},
+    {pos = Vector3.new(-483.4, -3.9, 97.3)},
+    {pos = Vector3.new(-474.7, -5.9, 91.0)},
+    {pos = Vector3.new(-476.1, -5.5, 25.4)}
+}
+
+local aw_gui = Instance.new("ScreenGui")
+aw_gui.Name = "AutoWalkGui"
+aw_gui.ResetOnSpawn = false
+aw_gui.Enabled = false
+aw_gui.Parent = lp:WaitForChild("PlayerGui")
+
+local aw_panel = Instance.new("Frame")
+aw_panel.Size = UDim2.fromScale(0.22, 0.28)
+aw_panel.Position = UDim2.fromScale(0.6, 0.6)
+aw_panel.BackgroundColor3 = Color3.fromRGB(0,0,0)
+aw_panel.BorderSizePixel = 0
+aw_panel.Parent = aw_gui
+aw_panel.Active = true
+aw_panel.Draggable = true
+Instance.new("UICorner", aw_panel).CornerRadius = UDim.new(0.18,0)
+local aw_stroke = Instance.new("UIStroke", aw_panel)
+aw_stroke.Thickness = 2; aw_stroke.Color = Color3.fromRGB(150,150,150); aw_stroke.Transparency = 0.25
+
+local aw_particleFolder = Instance.new("Folder", aw_panel)
+local function aw_spawnParticle()
+    local p = Instance.new("Frame"); p.Parent = aw_particleFolder
+    p.Size = UDim2.fromScale(math.random(3,5)/100, math.random(3,5)/100)
+    p.Position = UDim2.fromScale(math.random(), math.random())
+    p.BackgroundColor3 = Color3.fromRGB(200,200,200); p.BackgroundTransparency = 0.35; p.BorderSizePixel = 0
+    Instance.new("UICorner", p).CornerRadius = UDim.new(1,0)
+    local life = math.random(2,3)
+    p:TweenPosition(p.Position + UDim2.fromScale(math.random(-3,3)/100, math.random(-3,3)/100), "Out","Sine",life,true)
+    task.delay(life, function() if p then p:Destroy() end end)
+end
+task.spawn(function() while true do aw_spawnParticle(); task.wait(0.25) end end)
+
+local aw_toggleCount = 0
+local function aw_createToggle(text, yOffset)
+    aw_toggleCount += 1
+    local holder = Instance.new("Frame"); holder.Parent = aw_panel
+    holder.Size = UDim2.fromScale(0.9, 0.3); holder.Position = UDim2.fromScale(0.05, 0.1 + (yOffset * (aw_toggleCount - 1))); holder.BackgroundTransparency = 1
+    local label = Instance.new("TextLabel"); label.Parent = holder
+    label.Size = UDim2.fromScale(1, 0.5); label.Position = UDim2.fromScale(0, 0); label.BackgroundTransparency = 1
+    label.Text = text; label.TextScaled = true; label.Font = Enum.Font.GothamBold; label.TextColor3 = Color3.fromRGB(170,0,255)
+    local track = Instance.new("Frame"); track.Parent = holder
+    track.Size = UDim2.fromScale(0.6, 0.4); track.Position = UDim2.fromScale(0.2, 0.5)
+    track.BackgroundColor3 = Color3.fromRGB(35,35,35); track.BorderSizePixel = 0
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
+    local knob = Instance.new("Frame"); knob.Parent = track
+    knob.Size = UDim2.fromScale(0.48, 0.9); knob.Position = UDim2.fromScale(0.04, 0.05)
+    knob.BackgroundColor3 = Color3.new(1,1,1); knob.BorderSizePixel = 0
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+    local button = Instance.new("TextButton"); button.Parent = track
+    button.Size = UDim2.fromScale(1,1); button.BackgroundTransparency = 1; button.Text = ""
+    return track, knob, button
+end
+
+local function aw_setToggle(on, track, knob)
+    if on then track.BackgroundColor3 = Color3.fromRGB(170,0,255); knob:TweenPosition(UDim2.fromScale(0.52,0.05),"Out","Quad",0.15,true)
+    else track.BackgroundColor3 = Color3.fromRGB(35,35,35); knob:TweenPosition(UDim2.fromScale(0.04,0.05),"Out","Quad",0.15,true) end
+end
+
+local function aw_moveToPoint(hrp, target, speed)
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if not AutoWalkActive then conn:Disconnect(); hrp.AssemblyLinearVelocity = Vector3.zero; return end
+        local pos = hrp.Position
+        local dir = Vector3.new(target.X,pos.Y,target.Z) - pos
+        if dir.Magnitude <= 2 then conn:Disconnect(); hrp.AssemblyLinearVelocity = Vector3.zero; return end
+        hrp.AssemblyLinearVelocity = Vector3.new(dir.Unit.X*speed, hrp.AssemblyLinearVelocity.Y, dir.Unit.Z*speed)
+    end)
+    while AutoWalkActive and (Vector3.new(hrp.Position.X,0,hrp.Position.Z)-Vector3.new(target.X,0,target.Z)).Magnitude > 2 do
+        RunService.Heartbeat:Wait()
+    end
+end
+
+local function aw_runPath(path)
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    for i, point in ipairs(path) do
+        if not AutoWalkActive then return end
+        local speed = i > 2 and AW_SECOND_PHASE_SPEED or AW_VELOCITY_SPEED
+        aw_moveToPoint(hrp, point.pos, speed)
+        if i == 2 and AutoWalkActive then
+            hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, AW_JUMP_VELOCITY, hrp.AssemblyLinearVelocity.Z)
+            task.wait(0.35)
+        end
+        if i == 1 or i == 3 or i == 4 then task.wait(0.01) end
+    end
+end
+
+local function aw_startPath(path)
+    AutoWalkActive = true
+    task.spawn(function()
+        while AutoWalkActive do aw_runPath(path); task.wait(0.1) end
+    end)
+end
+
+local function aw_stopAll()
+    AutoWalkActive = false
+    local char = lp.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero end
+end
+
+local aw_sw2, aw_k2, aw_b2 = aw_createToggle("LEFT STEAL", 0.4)
+local aw_sw1, aw_k1, aw_b1 = aw_createToggle("RIGHT STEAL", 0.4)
+local aw_t1, aw_t2 = false, false
+
+aw_b1.MouseButton1Click:Connect(function()
+    aw_t1=not aw_t1; aw_t2=false; aw_setToggle(aw_t1,aw_sw1,aw_k1); aw_setToggle(false,aw_sw2,aw_k2); aw_stopAll(); if aw_t1 then aw_startPath(aw_path1) end
+end)
+aw_b2.MouseButton1Click:Connect(function()
+    aw_t2=not aw_t2; aw_t1=false; aw_setToggle(aw_t2,aw_sw2,aw_k2); aw_setToggle(false,aw_sw1,aw_k1); aw_stopAll(); if aw_t2 then aw_startPath(aw_path2) end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp or not autoWalkEnabled then return end
+    if input.KeyCode == Enum.KeyCode.E then
+        aw_t1=not aw_t1; aw_t2=false; aw_setToggle(aw_t1,aw_sw1,aw_k1); aw_setToggle(false,aw_sw2,aw_k2); aw_stopAll(); if aw_t1 then aw_startPath(aw_path1) end
+    elseif input.KeyCode == Enum.KeyCode.Q then
+        aw_t2=not aw_t2; aw_t1=false; aw_setToggle(aw_t2,aw_sw2,aw_k2); aw_setToggle(false,aw_sw1,aw_k1); aw_stopAll(); if aw_t2 then aw_startPath(aw_path2) end
+    end
+end)
+
+-------------------------------------------------------------------------
 -- XRAY BASE MODULE
 -------------------------------------------------------------------------
 local XrayBase={Enabled=false,OriginalTransparency={},Connections={},BaseKeywords={"base","claim"}}
@@ -763,7 +905,10 @@ AddToggle("Combat","Auto Grab",false,function(v) AUTO_GRAB_ENABLED=v end)
 AddToggle("Combat","Speed Customizer",false,function(v) if v then enableSpeedCustomizer() else disableSpeedCustomizer() end end)
 AddToggle("Combat","Inf Jump",false,function(v) if v then enableInfJump() else disableInfJump() end end)
 AddToggle("Combat","Spin",false,function(v) if v then enableSpin() else disableSpin() end end)
-AddToggle("Combat","Auto Walk",false,function(v) end)
+AddToggle("Combat","Auto Walk",false,function(v)
+    autoWalkEnabled=v; aw_gui.Enabled=v
+    if not v then aw_stopAll(); aw_t1=false; aw_t2=false; aw_setToggle(false,aw_sw1,aw_k1); aw_setToggle(false,aw_sw2,aw_k2) end
+end)
 AddToggle("Combat","Auto Medusa",false,function(v) end)
 
 AddToggle("Protect","Optimizer",false,function(v)
@@ -822,6 +967,39 @@ RunService.RenderStepped:Connect(function()
         local fps=math.floor(frameCount/(now-lastTime)); frameCount=0; lastTime=now
         HudFPS.Text="FPS: "..fps; HudFPS.TextColor3=fps>=55 and Color3.fromRGB(120,255,160) or fps>=30 and Color3.fromRGB(255,220,80) or Color3.fromRGB(255,80,80)
         local ping=math.floor(lp:GetNetworkPing()*1000); HudPing.Text="Ping: "..ping; HudPing.TextColor3=ping<=80 and Color3.fromRGB(120,200,255) or ping<=150 and Color3.fromRGB(255,220,80) or Color3.fromRGB(255,80,80)
+    end
+end)
+
+-- GRAB PROGRESS BAR (below HUD)
+local GrabBarFrame=Instance.new("Frame"); GrabBarFrame.Name="GrabBar"; GrabBarFrame.Size=UDim2.new(0,220,0,8); GrabBarFrame.Position=UDim2.new(0.5,-110,0,34); GrabBarFrame.BackgroundColor3=Color3.fromRGB(25,25,30); GrabBarFrame.BackgroundTransparency=0.2; GrabBarFrame.BorderSizePixel=0; GrabBarFrame.Parent=HudGui
+Instance.new("UICorner",GrabBarFrame).CornerRadius=UDim.new(1,0)
+local hs2=Instance.new("UIStroke",GrabBarFrame); hs2.Color=Color3.fromRGB(255,255,255); hs2.Thickness=1; hs2.Transparency=0.7
+
+local GrabBarFill=Instance.new("Frame"); GrabBarFill.Name="GrabFill"; GrabBarFill.Size=UDim2.new(0,0,1,0); GrabBarFill.Position=UDim2.new(0,0,0,0); GrabBarFill.BackgroundColor3=Color3.fromRGB(138,43,226); GrabBarFill.BorderSizePixel=0; GrabBarFill.Parent=GrabBarFrame
+Instance.new("UICorner",GrabBarFill).CornerRadius=UDim.new(1,0)
+local GrabBarGrad=Instance.new("UIGradient"); GrabBarGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(80,0,200)),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(200,80,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(80,0,200))}); GrabBarGrad.Parent=GrabBarFill
+
+local GrabDot=Instance.new("Frame"); GrabDot.Size=UDim2.new(0,10,0,10); GrabDot.AnchorPoint=Vector2.new(0.5,0.5); GrabDot.Position=UDim2.new(0.5,0,0.5,0); GrabDot.BackgroundColor3=Color3.fromRGB(180,80,255); GrabDot.BorderSizePixel=0; GrabDot.BackgroundTransparency=1; GrabDot.Parent=GrabBarFrame
+Instance.new("UICorner",GrabDot).CornerRadius=UDim.new(1,0)
+
+local GrabLabel=Instance.new("TextLabel"); GrabLabel.Size=UDim2.new(0,60,0,8); GrabLabel.Position=UDim2.new(1,4,0,0); GrabLabel.BackgroundTransparency=1; GrabLabel.Text=""; GrabLabel.TextColor3=Color3.fromRGB(200,140,255); GrabLabel.Font=Enum.Font.GothamBold; GrabLabel.TextSize=8; GrabLabel.TextXAlignment=Enum.TextXAlignment.Left; GrabLabel.Parent=GrabBarFrame
+
+local grabTween=nil
+RunService.Heartbeat:Connect(function()
+    local prog = StealProgress or 0
+    local grabbing = IsStealing and AUTO_GRAB_ENABLED
+    local targetW = grabbing and prog or 0
+    if grabTween then grabTween:Cancel() end
+    grabTween = TweenService:Create(GrabBarFill, TweenInfo.new(0.08, Enum.EasingStyle.Linear), {Size=UDim2.new(targetW,0,1,0)})
+    grabTween:Play()
+    GrabDot.BackgroundTransparency = grabbing and (0.2 + math.sin(tick()*6)*0.3) or 1
+    GrabDot.BackgroundColor3 = grabbing and Color3.fromRGB(200,80,255) or Color3.fromRGB(180,80,255)
+    if grabbing then
+        GrabLabel.Text = math.floor(prog*100).."%"
+        GrabBarFill.BackgroundColor3 = Color3.fromRGB(138,43,226)
+    else
+        GrabLabel.Text = AUTO_GRAB_ENABLED and "READY" or ""
+        GrabBarFill.BackgroundColor3 = Color3.fromRGB(50,50,60)
     end
 end)
 
