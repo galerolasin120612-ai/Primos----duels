@@ -234,48 +234,6 @@ local function disableSafeFollow()
 end
 
 -------------------------------------------------------------------------
--- ANTI-RAGDOLL MODULE
--------------------------------------------------------------------------
-local AntiRagdoll = {Enabled=false,RAGDOLL_SPEED=16,currentCharacter=nil,ragdollRemoteConnection=nil,moveConnection=nil,playerModule=nil,controls=nil}
-pcall(function() AntiRagdoll.playerModule=require(lp:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")); AntiRagdoll.controls=AntiRagdoll.playerModule:GetControls() end)
-
-local function cleanupRagdoll()
-    if AntiRagdoll.currentCharacter then local root=AntiRagdoll.currentCharacter:FindFirstChild("HumanoidRootPart"); if root then local a=root:FindFirstChild("RagdollAnchor"); if a then a:Destroy() end end end
-    if AntiRagdoll.moveConnection then AntiRagdoll.moveConnection:Disconnect(); AntiRagdoll.moveConnection=nil end
-end
-
-local function disconnectRemote()
-    if AntiRagdoll.ragdollRemoteConnection then AntiRagdoll.ragdollRemoteConnection:Disconnect(); AntiRagdoll.ragdollRemoteConnection=nil end
-end
-
-local function setupAntiRagdoll(char)
-    AntiRagdoll.currentCharacter=char; cleanupRagdoll(); disconnectRemote()
-    local humanoid=char:WaitForChild("Humanoid",5); local root=char:WaitForChild("HumanoidRootPart",5); local head=char:WaitForChild("Head",5)
-    if not (humanoid and root and head) then return end
-    local ragdollRemote=ReplicatedStorage:WaitForChild("Packages",8):WaitForChild("Ragdoll",5):WaitForChild("Ragdoll",5)
-    if not ragdollRemote or not ragdollRemote:IsA("RemoteEvent") then return end
-    AntiRagdoll.ragdollRemoteConnection = ragdollRemote.OnClientEvent:Connect(function(arg1,arg2)
-        if not AntiRagdoll.Enabled then return end
-        if arg1=="Make" or arg2=="manualM" then
-            humanoid:ChangeState(Enum.HumanoidStateType.Freefall); Workspace.CurrentCamera.CameraSubject=head; root.CanCollide=false
-            if AntiRagdoll.controls then pcall(AntiRagdoll.controls.Enable,AntiRagdoll.controls) end; cleanupRagdoll()
-            local anchor=Instance.new("BodyPosition"); anchor.Name="RagdollAnchor"; anchor.MaxForce=Vector3.new(1e6,1e6,1e6); anchor.P=5000; anchor.D=1000; anchor.Position=root.Position; anchor.Parent=root
-            AntiRagdoll.moveConnection=RunService.RenderStepped:Connect(function()
-                if not AntiRagdoll.Enabled or not anchor or not anchor.Parent then if AntiRagdoll.moveConnection then AntiRagdoll.moveConnection:Disconnect(); AntiRagdoll.moveConnection=nil end; return end
-                local md=humanoid.MoveDirection; anchor.Position=md.Magnitude>0 and root.Position+md.Unit*AntiRagdoll.RAGDOLL_SPEED or root.Position
-            end)
-        end
-        if arg1=="Destroy" or arg2=="manualD" then
-            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp); Workspace.CurrentCamera.CameraSubject=humanoid; root.CanCollide=true
-            if AntiRagdoll.controls then pcall(AntiRagdoll.controls.Enable,AntiRagdoll.controls) end; cleanupRagdoll()
-        end
-    end)
-end
-
-lp.CharacterAdded:Connect(function(char) if AntiRagdoll.Enabled then setupAntiRagdoll(char) end end)
-lp.CharacterRemoving:Connect(function() cleanupRagdoll(); disconnectRemote(); AntiRagdoll.currentCharacter=nil end)
-
--------------------------------------------------------------------------
 -- ANTI TURRET
 -------------------------------------------------------------------------
 local AntiTurret={Enabled=false,Target=nil,Conn=nil,Dist=60,Pull=-5}
@@ -290,6 +248,219 @@ local function findTurret()
         end
     end
 end
+
+-------------------------------------------------------------------------
+-- NEW ANTI-RAGDOLL MODULE
+-------------------------------------------------------------------------
+local antiRagdollMode = nil
+local ragdollConnections = {}
+local cachedCharData = {}
+
+local function cacheCharacterData()
+    local char = lp.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return false end
+    cachedCharData = { character = char, humanoid = hum, root = root }
+    return true
+end
+
+local function disconnectAllRagdoll()
+    for _, conn in ipairs(ragdollConnections) do pcall(function() conn:Disconnect() end) end
+    ragdollConnections = {}
+end
+
+local function isRagdolled()
+    if not cachedCharData.humanoid then return false end
+    local state = cachedCharData.humanoid:GetState()
+    local ragdollStates = {[Enum.HumanoidStateType.Physics]=true,[Enum.HumanoidStateType.Ragdoll]=true,[Enum.HumanoidStateType.FallingDown]=true}
+    if ragdollStates[state] then return true end
+    local endTime = lp:GetAttribute("RagdollEndTime")
+    if endTime and (endTime - Workspace:GetServerTimeNow()) > 0 then return true end
+    return false
+end
+
+local function forceExitRagdoll()
+    if not cachedCharData.humanoid or not cachedCharData.root then return end
+    pcall(function() lp:SetAttribute("RagdollEndTime", Workspace:GetServerTimeNow()) end)
+    for _, descendant in ipairs(cachedCharData.character:GetDescendants()) do
+        if descendant:IsA("BallSocketConstraint") or (descendant:IsA("Attachment") and descendant.Name:find("RagdollAttachment")) then
+            descendant:Destroy()
+        end
+    end
+    if cachedCharData.humanoid.Health > 0 then cachedCharData.humanoid:ChangeState(Enum.HumanoidStateType.Running) end
+    cachedCharData.root.Anchored = false
+end
+
+local function v1HeartbeatLoop()
+    while antiRagdollMode == "v1" do
+        task.wait()
+        if isRagdolled() then forceExitRagdoll() end
+    end
+end
+
+local function EnableAntiRagdoll()
+    if antiRagdollMode == "v1" then return end
+    if not cacheCharacterData() then return end
+    antiRagdollMode = "v1"
+    local camConn = RunService.RenderStepped:Connect(function()
+        local cam = Workspace.CurrentCamera
+        if cam and cachedCharData.humanoid then cam.CameraSubject = cachedCharData.humanoid end
+    end)
+    table.insert(ragdollConnections, camConn)
+    local respawnConn = lp.CharacterAdded:Connect(function() task.wait(0.5); cacheCharacterData() end)
+    table.insert(ragdollConnections, respawnConn)
+    task.spawn(v1HeartbeatLoop)
+end
+
+local function DisableAntiRagdoll()
+    antiRagdollMode = nil
+    disconnectAllRagdoll()
+    cachedCharData = {}
+end
+
+-------------------------------------------------------------------------
+-- AUTO GRAB MODULE
+-------------------------------------------------------------------------
+local AUTO_GRAB_ENABLED = false
+local AUTO_STEAL_PROX_RADIUS = 20
+local allAnimalsCache = {}
+local PromptMemoryCache = {}
+local InternalStealCache = {}
+local LastTargetUID = nil
+local IsStealing = false
+local StealProgress = 0
+local CurrentStealTarget = nil
+local stealConnection = nil
+
+local function isMyBase(plotName)
+    if not Workspace:FindFirstChild("Plots") then return false end
+    local plot = Workspace.Plots:FindFirstChild(plotName)
+    if not plot then return false end
+    local sign = plot:FindFirstChild("PlotSign")
+    if sign then
+        local yourBase = sign:FindFirstChild("YourBase")
+        if yourBase and yourBase:IsA("BillboardGui") then return yourBase.Enabled == true end
+    end
+    return false
+end
+
+local function scanSinglePlot(plot)
+    if not plot or not plot:IsA("Model") then return end
+    if isMyBase(plot.Name) then return end
+    local podiums = plot:FindFirstChild("AnimalPodiums")
+    if not podiums then return end
+    for _, podium in ipairs(podiums:GetChildren()) do
+        if podium:IsA("Model") and podium:FindFirstChild("Base") then
+            local animalName = "Unknown"
+            local spawn = podium.Base:FindFirstChild("Spawn")
+            if spawn then
+                for _, child in ipairs(spawn:GetChildren()) do
+                    if child:IsA("Model") and child.Name ~= "PromptAttachment" then animalName = child.Name; break end
+                end
+            end
+            table.insert(allAnimalsCache, {name=animalName,plot=plot.Name,slot=podium.Name,worldPosition=podium:GetPivot().Position,uid=plot.Name.."_"..podium.Name})
+        end
+    end
+end
+
+local function initializeAutoGrabScanner()
+    task.spawn(function()
+        task.wait(2)
+        if not Workspace:FindFirstChild("Plots") then return end
+        local plots = Workspace.Plots
+        for _, plot in ipairs(plots:GetChildren()) do if plot:IsA("Model") then scanSinglePlot(plot) end end
+        plots.ChildAdded:Connect(function(plot) if plot:IsA("Model") then task.wait(0.5); scanSinglePlot(plot) end end)
+        task.spawn(function()
+            while task.wait(5) do
+                allAnimalsCache = {}
+                for _, plot in ipairs(plots:GetChildren()) do if plot:IsA("Model") then scanSinglePlot(plot) end end
+            end
+        end)
+    end)
+end
+
+local function findProximityPromptForAnimal(animalData)
+    if not animalData then return nil end
+    local cached = PromptMemoryCache[animalData.uid]
+    if cached and cached.Parent then return cached end
+    if not Workspace:FindFirstChild("Plots") then return nil end
+    local plot = Workspace.Plots:FindFirstChild(animalData.plot)
+    if not plot then return nil end
+    local podiums = plot:FindFirstChild("AnimalPodiums")
+    if not podiums then return nil end
+    local podium = podiums:FindFirstChild(animalData.slot)
+    if not podium then return nil end
+    local base = podium:FindFirstChild("Base"); if not base then return nil end
+    local spawn = base:FindFirstChild("Spawn"); if not spawn then return nil end
+    local attach = spawn:FindFirstChild("PromptAttachment"); if not attach then return nil end
+    for _, p in ipairs(attach:GetChildren()) do
+        if p:IsA("ProximityPrompt") then PromptMemoryCache[animalData.uid]=p; return p end
+    end
+    return nil
+end
+
+local function buildStealCallbacks(prompt)
+    if InternalStealCache[prompt] then return end
+    local data = {holdCallbacks={},triggerCallbacks={},ready=true}
+    local ok1, conns1 = pcall(getconnections, prompt.PromptButtonHoldBegan)
+    if ok1 and type(conns1)=="table" then for _,conn in ipairs(conns1) do if type(conn.Function)=="function" then table.insert(data.holdCallbacks, conn.Function) end end end
+    local ok2, conns2 = pcall(getconnections, prompt.Triggered)
+    if ok2 and type(conns2)=="table" then for _,conn in ipairs(conns2) do if type(conn.Function)=="function" then table.insert(data.triggerCallbacks, conn.Function) end end end
+    if (#data.holdCallbacks>0) or (#data.triggerCallbacks>0) then InternalStealCache[prompt]=data end
+end
+
+local function executeInternalStealAsync(prompt, animalData)
+    local data = InternalStealCache[prompt]
+    if not data or not data.ready then return false end
+    data.ready=false; IsStealing=true; StealProgress=0; CurrentStealTarget=animalData
+    task.spawn(function()
+        if #data.holdCallbacks>0 then for _,fn in ipairs(data.holdCallbacks) do task.spawn(fn) end end
+        local startTime=tick()
+        while tick()-startTime < 1.3 do StealProgress=(tick()-startTime)/1.3; task.wait(0.05) end
+        StealProgress=1
+        if #data.triggerCallbacks>0 then for _,fn in ipairs(data.triggerCallbacks) do task.spawn(fn) end end
+        task.wait(0.1); data.ready=true; task.wait(0.3); IsStealing=false; StealProgress=0; CurrentStealTarget=nil
+    end)
+    return true
+end
+
+local function getNearestAnimal()
+    local char=lp.Character; if not char then return nil end
+    local root=char:FindFirstChild("HumanoidRootPart"); if not root then return nil end
+    local nearest,minDist=nil,math.huge
+    for _,animalData in ipairs(allAnimalsCache) do
+        if isMyBase(animalData.plot) then continue end
+        if animalData.worldPosition then
+            local dist=(root.Position-animalData.worldPosition).Magnitude
+            if dist<minDist then minDist=dist; nearest=animalData end
+        end
+    end
+    return nearest
+end
+
+local function startAutoGrabLoop()
+    if stealConnection then stealConnection:Disconnect() end
+    stealConnection = RunService.Heartbeat:Connect(function()
+        if not AUTO_GRAB_ENABLED then return end
+        if IsStealing then return end
+        local char=lp.Character; if not char then return end
+        local root=char:FindFirstChild("HumanoidRootPart"); if not root then return end
+        local targetAnimal=getNearestAnimal(); if not targetAnimal then return end
+        if (root.Position-targetAnimal.worldPosition).Magnitude > AUTO_STEAL_PROX_RADIUS then return end
+        if LastTargetUID~=targetAnimal.uid then LastTargetUID=targetAnimal.uid end
+        local prompt=PromptMemoryCache[targetAnimal.uid]
+        if not prompt or not prompt.Parent then prompt=findProximityPromptForAnimal(targetAnimal) end
+        if prompt then
+            buildStealCallbacks(prompt)
+            if InternalStealCache[prompt] then executeInternalStealAsync(prompt, targetAnimal) end
+        end
+    end)
+end
+
+initializeAutoGrabScanner()
+startAutoGrabLoop()
 
 -------------------------------------------------------------------------
 -- XRAY BASE MODULE
@@ -588,6 +759,7 @@ AddToggle("Combat","Melee Aimbot",false,function(active)
     else if Cebo.Conn then Cebo.Conn:Disconnect() end; if Cebo.Circle then Cebo.Circle:Destroy() end; if Cebo.Align then Cebo.Align:Destroy() end; if Cebo.Attach then Cebo.Attach:Destroy() end; if lp.Character and lp.Character:FindFirstChild("Humanoid") then lp.Character.Humanoid.AutoRotate=true end end
 end)
 
+AddToggle("Combat","Auto Grab",false,function(v) AUTO_GRAB_ENABLED=v end)
 AddToggle("Combat","Speed Customizer",false,function(v) if v then enableSpeedCustomizer() else disableSpeedCustomizer() end end)
 AddToggle("Combat","Inf Jump",false,function(v) if v then enableInfJump() else disableInfJump() end end)
 AddToggle("Combat","Spin",false,function(v) if v then enableSpin() else disableSpin() end end)
@@ -600,7 +772,7 @@ AddToggle("Protect","Optimizer",false,function(v)
 end)
 
 AddToggle("Protect","Anti-Ragdoll",false,function(v)
-    AntiRagdoll.Enabled=v; if v and lp.Character then setupAntiRagdoll(lp.Character) else cleanupRagdoll(); disconnectRemote() end
+    if v then EnableAntiRagdoll() else DisableAntiRagdoll() end
 end)
 
 local AntiEffects={Enabled=false,Watcher=nil,Keywords={"effect","vfx","fx","particle","camera","shake","blur","flash","visual","ui","item"}}
