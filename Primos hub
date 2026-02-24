@@ -1,4 +1,3 @@
-Yung problema is hindi nini-save yung position ng mga GUI. Kailangan i-save sa file yung coordinates tapos i-load pag execute. Eto na yung updated script na may position saving:
 -- leaked by https://discord.gg/MT6BXdH9q
 
 local UserInputService = game:GetService("UserInputService")
