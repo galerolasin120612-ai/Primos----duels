@@ -1,3 +1,4 @@
+Yung problema is hindi nini-save yung position ng mga GUI. Kailangan i-save sa file yung coordinates tapos i-load pag execute. Eto na yung updated script na may position saving:
 -- leaked by https://discord.gg/MT6BXdH9q
 
 local UserInputService = game:GetService("UserInputService")
@@ -26,6 +27,9 @@ local COLORS = {
 local CONFIG_FILE = "IvoDuels_config.txt"
 local ToggleStates = {}
 
+-- Forward declarations for GUI objects (needed for save/load)
+local MainFrame, ToggleIcon, aw_panel
+
 local function autoSave()
     local lines = {}
     lines[#lines+1] = "SpeedValue=" .. (SpeedCustomizer and SpeedCustomizer.SpeedValue or 58)
@@ -35,9 +39,32 @@ local function autoSave()
     for k, v in pairs(ToggleStates) do
         lines[#lines+1] = "T_" .. k .. "=" .. tostring(v)
     end
+    -- Save GUI positions
+    if MainFrame then
+        local p = MainFrame.Position
+        lines[#lines+1] = "MainFrame_X=" .. p.X.Scale
+        lines[#lines+1] = "MainFrame_XO=" .. p.X.Offset
+        lines[#lines+1] = "MainFrame_Y=" .. p.Y.Scale
+        lines[#lines+1] = "MainFrame_YO=" .. p.Y.Offset
+    end
+    if ToggleIcon then
+        local p = ToggleIcon.Position
+        lines[#lines+1] = "ToggleIcon_X=" .. p.X.Scale
+        lines[#lines+1] = "ToggleIcon_XO=" .. p.X.Offset
+        lines[#lines+1] = "ToggleIcon_Y=" .. p.Y.Scale
+        lines[#lines+1] = "ToggleIcon_YO=" .. p.Y.Offset
+    end
+    if aw_panel then
+        local p = aw_panel.Position
+        lines[#lines+1] = "AwPanel_X=" .. p.X.Scale
+        lines[#lines+1] = "AwPanel_XO=" .. p.X.Offset
+        lines[#lines+1] = "AwPanel_Y=" .. p.Y.Scale
+        lines[#lines+1] = "AwPanel_YO=" .. p.Y.Offset
+    end
     pcall(writefile, CONFIG_FILE, table.concat(lines, "\n"))
 end
 
+local savedPositions = {}
 local function autoLoad()
     local ok, content = pcall(readfile, CONFIG_FILE)
     if not ok or not content then return end
@@ -48,8 +75,19 @@ local function autoLoad()
             elseif key == "StealValue" and SpeedCustomizer then SpeedCustomizer.StealValue = tonumber(val) or 29
             elseif key == "JumpValue"  and SpeedCustomizer then SpeedCustomizer.JumpValue  = tonumber(val) or 80
             elseif key == "DownValue"  and SpeedCustomizer then SpeedCustomizer.DownValue  = tonumber(val) or 8
-            elseif key:sub(1,2) == "T_" then ToggleStates[key:sub(3)] = (val == "true") end
+            elseif key:sub(1,2) == "T_" then ToggleStates[key:sub(3)] = (val == "true")
+            else savedPositions[key] = tonumber(val) end
         end
+    end
+    -- Apply saved positions
+    if savedPositions["MainFrame_X"] and MainFrame then
+        MainFrame.Position = UDim2.new(savedPositions["MainFrame_X"], savedPositions["MainFrame_XO"], savedPositions["MainFrame_Y"], savedPositions["MainFrame_YO"])
+    end
+    if savedPositions["ToggleIcon_X"] and ToggleIcon then
+        ToggleIcon.Position = UDim2.new(savedPositions["ToggleIcon_X"], savedPositions["ToggleIcon_XO"], savedPositions["ToggleIcon_Y"], savedPositions["ToggleIcon_YO"])
+    end
+    if savedPositions["AwPanel_X"] and aw_panel then
+        aw_panel.Position = UDim2.new(savedPositions["AwPanel_X"], savedPositions["AwPanel_XO"], savedPositions["AwPanel_Y"], savedPositions["AwPanel_YO"])
     end
 end
 
@@ -62,7 +100,7 @@ local function create(class, props)
     return obj
 end
 
-local ToggleIcon = create("TextButton", {
+ToggleIcon = create("TextButton", {
     Size = UDim2.new(0, 45, 0, 45), Position = UDim2.new(0.05, 0, 0.2, 0),
     BackgroundColor3 = COLORS.MainBG, Text = "I", TextColor3 = COLORS.Border,
     Font = "GothamBold", TextSize = 20, Parent = ScreenGui
@@ -70,7 +108,7 @@ local ToggleIcon = create("TextButton", {
 create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = ToggleIcon})
 create("UIStroke", {Color = COLORS.Border, Thickness = 1.5, Parent = ToggleIcon})
 
-local MainFrame = create("Frame", {
+MainFrame = create("Frame", {
     Size = UDim2.new(0, 340, 0, 380), Position = UDim2.new(0.5, -170, 0.5, -190),
     BackgroundColor3 = COLORS.MainBG, BackgroundTransparency = 0.2, Visible = false, Parent = ScreenGui
 })
@@ -463,7 +501,7 @@ initializeAutoGrabScanner()
 startAutoGrabLoop()
 
 -------------------------------------------------------------------------
--- AUTO WALK MODULE (NEW)
+-- AUTO WALK MODULE
 -------------------------------------------------------------------------
 local AutoWalkActive = false
 local autoWalkEnabled = false
@@ -491,17 +529,38 @@ aw_gui.ResetOnSpawn = false
 aw_gui.Enabled = false
 aw_gui.Parent = lp:WaitForChild("PlayerGui")
 
-local aw_panel = Instance.new("Frame")
+aw_panel = Instance.new("Frame")
 aw_panel.Size = UDim2.fromScale(0.25, 0.35)
-aw_panel.Position = UDim2.fromScale(0.6, 0.6)
+aw_panel.Position = UDim2.fromScale(0.6, 0.6)  -- default position
 aw_panel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 aw_panel.BorderSizePixel = 0
 aw_panel.Parent = aw_gui
 aw_panel.Active = true
-aw_panel.Draggable = true
 Instance.new("UICorner", aw_panel).CornerRadius = UDim.new(0.12, 0)
 local aw_stroke = Instance.new("UIStroke", aw_panel)
 aw_stroke.Thickness = 2; aw_stroke.Color = Color3.fromRGB(100,100,100); aw_stroke.Transparency = 0.4
+
+-- Manual drag for aw_panel (so we can save position)
+do
+    local dragging, dragStart, startPos
+    aw_panel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = aw_panel.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false; autoSave() end end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            aw_panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+delta.X, startPos.Y.Scale, startPos.Y.Offset+delta.Y)
+        end
+    end)
+    aw_panel.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false; autoSave()
+        end
+    end)
+end
 
 local aw_particleFolder = Instance.new("Folder", aw_panel)
 local function aw_spawnParticle()
@@ -597,24 +656,20 @@ local function aw_startAutoLoop()
     end)
 end
 
--- Button callbacks
 aw_b1.MouseButton1Click:Connect(function()
     aw_t1=not aw_t1; aw_t2=false; aw_autoOn=false
     aw_setToggle(aw_t1,aw_sw1,aw_k1); aw_setToggle(false,aw_sw2,aw_k2); aw_setToggle(false,aw_sw3,aw_k3)
-    aw_stopAll()
-    if aw_t1 then AutoWalkActive=true; task.spawn(function() aw_runPath(aw_path1) end) end
+    aw_stopAll(); if aw_t1 then AutoWalkActive=true; task.spawn(function() aw_runPath(aw_path1) end) end
 end)
 aw_b2.MouseButton1Click:Connect(function()
     aw_t2=not aw_t2; aw_t1=false; aw_autoOn=false
     aw_setToggle(aw_t2,aw_sw2,aw_k2); aw_setToggle(false,aw_sw1,aw_k1); aw_setToggle(false,aw_sw3,aw_k3)
-    aw_stopAll()
-    if aw_t2 then AutoWalkActive=true; task.spawn(function() aw_runPath(aw_path2) end) end
+    aw_stopAll(); if aw_t2 then AutoWalkActive=true; task.spawn(function() aw_runPath(aw_path2) end) end
 end)
 aw_b3.MouseButton1Click:Connect(function()
     aw_autoOn=not aw_autoOn; aw_t1=false; aw_t2=false
     aw_setToggle(aw_autoOn,aw_sw3,aw_k3); aw_setToggle(false,aw_sw1,aw_k1); aw_setToggle(false,aw_sw2,aw_k2)
-    aw_stopAll()
-    if aw_autoOn then AutoWalkActive=true; aw_startAutoLoop() end
+    aw_stopAll(); if aw_autoOn then AutoWalkActive=true; aw_startAutoLoop() end
 end)
 
 UserInputService.InputBegan:Connect(function(input, gp)
@@ -1003,37 +1058,25 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- GRAB PROGRESS BAR (below HUD)
+-- GRAB PROGRESS BAR
 local GrabBarFrame=Instance.new("Frame"); GrabBarFrame.Name="GrabBar"; GrabBarFrame.Size=UDim2.new(0,220,0,8); GrabBarFrame.Position=UDim2.new(0.5,-110,0,34); GrabBarFrame.BackgroundColor3=Color3.fromRGB(25,25,30); GrabBarFrame.BackgroundTransparency=0.2; GrabBarFrame.BorderSizePixel=0; GrabBarFrame.Parent=HudGui
 Instance.new("UICorner",GrabBarFrame).CornerRadius=UDim.new(1,0)
 local hs2=Instance.new("UIStroke",GrabBarFrame); hs2.Color=Color3.fromRGB(255,255,255); hs2.Thickness=1; hs2.Transparency=0.7
-
 local GrabBarFill=Instance.new("Frame"); GrabBarFill.Name="GrabFill"; GrabBarFill.Size=UDim2.new(0,0,1,0); GrabBarFill.Position=UDim2.new(0,0,0,0); GrabBarFill.BackgroundColor3=Color3.fromRGB(138,43,226); GrabBarFill.BorderSizePixel=0; GrabBarFill.Parent=GrabBarFrame
 Instance.new("UICorner",GrabBarFill).CornerRadius=UDim.new(1,0)
 local GrabBarGrad=Instance.new("UIGradient"); GrabBarGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(80,0,200)),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(200,80,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(80,0,200))}); GrabBarGrad.Parent=GrabBarFill
-
 local GrabDot=Instance.new("Frame"); GrabDot.Size=UDim2.new(0,10,0,10); GrabDot.AnchorPoint=Vector2.new(0.5,0.5); GrabDot.Position=UDim2.new(0.5,0,0.5,0); GrabDot.BackgroundColor3=Color3.fromRGB(180,80,255); GrabDot.BorderSizePixel=0; GrabDot.BackgroundTransparency=1; GrabDot.Parent=GrabBarFrame
 Instance.new("UICorner",GrabDot).CornerRadius=UDim.new(1,0)
-
 local GrabLabel=Instance.new("TextLabel"); GrabLabel.Size=UDim2.new(0,60,0,8); GrabLabel.Position=UDim2.new(1,4,0,0); GrabLabel.BackgroundTransparency=1; GrabLabel.Text=""; GrabLabel.TextColor3=Color3.fromRGB(200,140,255); GrabLabel.Font=Enum.Font.GothamBold; GrabLabel.TextSize=8; GrabLabel.TextXAlignment=Enum.TextXAlignment.Left; GrabLabel.Parent=GrabBarFrame
-
 local grabTween=nil
 RunService.Heartbeat:Connect(function()
-    local prog = StealProgress or 0
-    local grabbing = IsStealing and AUTO_GRAB_ENABLED
-    local targetW = grabbing and prog or 0
+    local prog=StealProgress or 0; local grabbing=IsStealing and AUTO_GRAB_ENABLED; local targetW=grabbing and prog or 0
     if grabTween then grabTween:Cancel() end
-    grabTween = TweenService:Create(GrabBarFill, TweenInfo.new(0.08, Enum.EasingStyle.Linear), {Size=UDim2.new(targetW,0,1,0)})
-    grabTween:Play()
-    GrabDot.BackgroundTransparency = grabbing and (0.2 + math.sin(tick()*6)*0.3) or 1
-    GrabDot.BackgroundColor3 = grabbing and Color3.fromRGB(200,80,255) or Color3.fromRGB(180,80,255)
-    if grabbing then
-        GrabLabel.Text = math.floor(prog*100).."%"
-        GrabBarFill.BackgroundColor3 = Color3.fromRGB(138,43,226)
-    else
-        GrabLabel.Text = AUTO_GRAB_ENABLED and "READY" or ""
-        GrabBarFill.BackgroundColor3 = Color3.fromRGB(50,50,60)
-    end
+    grabTween=TweenService:Create(GrabBarFill,TweenInfo.new(0.08,Enum.EasingStyle.Linear),{Size=UDim2.new(targetW,0,1,0)}); grabTween:Play()
+    GrabDot.BackgroundTransparency=grabbing and (0.2+math.sin(tick()*6)*0.3) or 1
+    GrabDot.BackgroundColor3=grabbing and Color3.fromRGB(200,80,255) or Color3.fromRGB(180,80,255)
+    if grabbing then GrabLabel.Text=math.floor(prog*100).."%"; GrabBarFill.BackgroundColor3=Color3.fromRGB(138,43,226)
+    else GrabLabel.Text=AUTO_GRAB_ENABLED and "READY" or ""; GrabBarFill.BackgroundColor3=Color3.fromRGB(50,50,60) end
 end)
 
 -------------------------------------------------------------------------
@@ -1055,9 +1098,9 @@ LockBtn.MouseButton1Click:Connect(function()
 end)
 
 -------------------------------------------------------------------------
--- SETUP & DRAG
+-- SETUP & DRAG (with position saving)
 -------------------------------------------------------------------------
-local function drag(f)
+local function drag(f, saveKey)
     local d,ds,sp
     f.InputBegan:Connect(function(i)
         if UILocked then return end
@@ -1065,9 +1108,16 @@ local function drag(f)
     end)
     UserInputService.InputChanged:Connect(function(i)
         if UILocked then d=false; return end
-        if d and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then local delta=i.Position-ds; f.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y) end
+        if d and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+            local delta=i.Position-ds; f.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y)
+        end
     end)
-    f.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then d=false end end)
+    f.InputEnded:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            d=false; autoSave()  -- Save position when drag ends
+        end
+    end)
 end
+
 drag(MainFrame); drag(ToggleIcon)
 ToggleIcon.MouseButton1Click:Connect(function() MainFrame.Visible=not MainFrame.Visible end)
